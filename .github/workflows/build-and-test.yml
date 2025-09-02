@@ -1,0 +1,112 @@
+name: Build and test
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  debug_build:
+    name: Debug build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Build Debug
+        run: ./gradlew assembleDebug
+
+  release_build:
+    name: Release build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Build Release
+        run: ./gradlew assembleRelease
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-22.04
+    needs: [debug_build]
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Run Unit Tests
+        run: ./gradlew testDebugUnitTest
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: |
+            **/build/reports/tests/
+            **/build/test-results/
+
+  # Optional: Android Lint check
+  lint_check:
+    name: Lint Check
+    runs-on: ubuntu-22.04
+    needs: [debug_build]
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Run Lint
+        run: ./gradlew lintDebug
+      - name: Upload Lint Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lint-results
+          path: **/build/reports/lint/
+
+  # Optional: APK Size Check (tanpa Emerge)
+  apk_size_check:
+    name: APK Size Check
+    runs-on: ubuntu-22.04
+    needs: [debug_build]
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Build Demo Debug
+        run: ./gradlew stream-chat-android-ui-components-sample:assembleDemoDebug
+      - name: Check APK Size
+        run: |
+          APK_PATH="./stream-chat-android-ui-components-sample/build/outputs/apk/demo/debug/stream-chat-android-ui-components-sample-demo-debug.apk"
+          if [ -f "$APK_PATH" ]; then
+            SIZE=$(du -h "$APK_PATH" | cut -f1)
+            echo "APK Size: $SIZE"
+            echo "APK_SIZE=$SIZE" >> $GITHUB_ENV
+          else
+            echo "APK file not found!"
+            exit 1
+          fi
