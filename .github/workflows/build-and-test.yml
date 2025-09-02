@@ -1,7 +1,11 @@
-name: Build and test
+name: Android Build and Test
 
 on:
   push:
+    branches:
+      - develop
+      - main
+  pull_request:
     branches:
       - develop
       - main
@@ -12,127 +16,152 @@ concurrency:
 
 jobs:
   debug_build:
-    name: Debug build
+    name: Build Debug
     runs-on: ubuntu-22.04
     steps:
       - name: Check out code
-        uses: actions/checkout@v3.1.0
-      - uses: GetStream/android-ci-actions/actions/setup-java@main
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
       - name: Build Debug
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --no-daemon
+
       - name: Upload Debug APKs
-        uses: actions/upload-artifact@v4.4.3
+        uses: actions/upload-artifact@v4
         with:
           name: debug-apks
           path: |
             **/build/outputs/apk/**/*debug*.apk
             **/build/outputs/bundle/**/*debug*.aab
+          retention-days: 7
 
   release_build:
-    name: Release build
+    name: Build Release
     runs-on: ubuntu-22.04
     steps:
       - name: Check out code
-        uses: actions/checkout@v3.1.0
-      - uses: GetStream/android-ci-actions/actions/setup-java@main
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
       - name: Build Release
-        run: ./gradlew assembleRelease
+        run: ./gradlew assembleRelease --no-daemon
+
       - name: Upload Release APKs
-        uses: actions/upload-artifact@v4.4.3
+        uses: actions/upload-artifact@v4
         with:
           name: release-apks
           path: |
             **/build/outputs/apk/**/*release*.apk
             **/build/outputs/bundle/**/*release*.aab
+          retention-days: 7
 
   tests:
-    name: Tests
+    name: Run Tests
     runs-on: ubuntu-22.04
     steps:
       - name: Check out code
-        uses: actions/checkout@v3.1.0
-      - uses: GetStream/android-ci-actions/actions/setup-java@main
-      - name: Unit tests
-        run: ./scripts/ci-unit-tests.sh
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Run Unit Tests
+        run: |
+          if [ -f "./scripts/ci-unit-tests.sh" ]; then
+            chmod +x ./scripts/ci-unit-tests.sh
+            ./scripts/ci-unit-tests.sh
+          else
+            ./gradlew testDebugUnitTest --no-daemon
+          fi
+
       - name: Upload Test Results
-        uses: actions/upload-artifact@v4.4.3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: test-results
           path: |
-            ./**/build/reports/tests/
-            ./**/build/test-results/
+            **/build/reports/tests/
+            **/build/test-results/
+          retention-days: 30
 
-  size_check_xml:
-    name: Size Check XML
+  upload_xml_sample:
+    name: Upload XML Sample
     runs-on: ubuntu-22.04
     steps:
       - name: Check out code
-        uses: actions/checkout@v3.1.0
-      - uses: GetStream/android-ci-actions/actions/setup-java@main
-      - name: Build XML Demo Debug
-        run: ./gradlew stream-chat-android-ui-components-sample:assembleDemoDebug
-      - name: Check XML APK Size
-        run: |
-          echo "=== XML APK Size Analysis ==="
-          APK_PATH="./stream-chat-android-ui-components-sample/build/outputs/apk/demo/debug/stream-chat-android-ui-components-sample-demo-debug.apk"
-          if [ -f "$APK_PATH" ]; then
-            SIZE_BYTES=$(stat -f%z "$APK_PATH")
-            SIZE_MB=$(echo "scale=2; $SIZE_BYTES / (1024*1024)" | bc)
-            echo "XML APK Size: $SIZE_MB MB"
-            echo "SIZE_MB=$SIZE_MB" >> $GITHUB_ENV
-          else
-            echo "XML APK not found!"
-            exit 1
-          fi
-      - name: Upload XML APK
-        uses: actions/upload-artifact@v4.4.3
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
-          name: xml-demo-apk
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Build XML Sample
+        run: ./gradlew stream-chat-android-ui-components-sample:assembleDemoDebug --no-daemon
+
+      - name: Upload XML Sample APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: xml-sample-apk
           path: ./stream-chat-android-ui-components-sample/build/outputs/apk/demo/debug/stream-chat-android-ui-components-sample-demo-debug.apk
+          retention-days: 7
 
-  size_check_compose:
-    name: Size Check Compose
+  upload_compose_sample:
+    name: Upload Compose Sample
     runs-on: ubuntu-22.04
     steps:
       - name: Check out code
-        uses: actions/checkout@v3.1.0
-      - uses: GetStream/android-ci-actions/actions/setup-java@main
-      - name: Build Compose Debug
-        run: ./gradlew stream-chat-android-compose-sample:assembleDebug
-      - name: Check Compose APK Size
-        run: |
-          echo "=== Compose APK Size Analysis ==="
-          APK_PATH="./stream-chat-android-compose-sample/build/outputs/apk/debug/stream-chat-android-compose-sample-debug.apk"
-          if [ -f "$APK_PATH" ]; then
-            SIZE_BYTES=$(stat -f%z "$APK_PATH")
-            SIZE_MB=$(echo "scale=2; $SIZE_BYTES / (1024*1024)" | bc)
-            echo "Compose APK Size: $SIZE_MB MB"
-            echo "SIZE_MB=$SIZE_MB" >> $GITHUB_ENV
-          else
-            echo "Compose APK not found!"
-            exit 1
-          fi
-      - name: Upload Compose APK
-        uses: actions/upload-artifact@v4.4.3
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
-          name: compose-debug-apk
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Build Compose Sample
+        run: ./gradlew stream-chat-android-compose-sample:assembleDebug --no-daemon
+
+      - name: Upload Compose Sample APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: compose-sample-apk
           path: ./stream-chat-android-compose-sample/build/outputs/apk/debug/stream-chat-android-compose-sample-debug.apk
+          retention-days: 7
 
   build_summary:
     name: Build Summary
     runs-on: ubuntu-22.04
-    needs: [debug_build, release_build, tests, size_check_xml, size_check_compose]
+    needs: [debug_build, release_build, tests, upload_xml_sample, upload_compose_sample]
+    if: always()
     steps:
-      - name: Summary
+      - name: Show Summary
         run: |
-          echo "🎉 Build and Test Process Completed Successfully!"
+          echo "✅ Build Process Completed"
+          echo "📦 Available Artifacts:"
+          echo "   - debug-apks (All debug APKs)"
+          echo "   - release-apks (All release APKs)"
+          echo "   - test-results (Test reports)"
+          echo "   - xml-sample-apk (XML Sample APK)"
+          echo "   - compose-sample-apk (Compose Sample APK)"
           echo ""
-          echo "📦 Artifacts Available for Download:"
-          echo "   - Debug APKs (debug-apks)"
-          echo "   - Release APKs (release-apks)" 
-          echo "   - Test Results (test-results)"
-          echo "   - XML Demo APK (xml-demo-apk)"
-          echo "   - Compose Debug APK (compose-debug-apk)"
-          echo ""
-          echo "✅ All jobs completed successfully!"
+          echo "View artifacts in GitHub Actions artifacts section"
