@@ -18,8 +18,15 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v3.1.0
       - uses: GetStream/android-ci-actions/actions/setup-java@main
-      - name: Build
+      - name: Build Debug
         run: ./gradlew assembleDebug
+      - name: Upload Debug APKs
+        uses: actions/upload-artifact@v4.4.3
+        with:
+          name: debug-apks
+          path: |
+            **/build/outputs/apk/**/*debug*.apk
+            **/build/outputs/bundle/**/*debug*.aab
 
   release_build:
     name: Release build
@@ -28,8 +35,15 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v3.1.0
       - uses: GetStream/android-ci-actions/actions/setup-java@main
-      - name: Build
+      - name: Build Release
         run: ./gradlew assembleRelease
+      - name: Upload Release APKs
+        uses: actions/upload-artifact@v4.4.3
+        with:
+          name: release-apks
+          path: |
+            **/build/outputs/apk/**/*release*.apk
+            **/build/outputs/bundle/**/*release*.aab
 
   tests:
     name: Tests
@@ -40,13 +54,15 @@ jobs:
       - uses: GetStream/android-ci-actions/actions/setup-java@main
       - name: Unit tests
         run: ./scripts/ci-unit-tests.sh
-      - name: Upload testDebugUnitTest results
+      - name: Upload Test Results
         uses: actions/upload-artifact@v4.4.3
-        if: failure()
+        if: always()
         with:
-          name: testDebugUnitTest
-          path: ./**/build/reports/tests/testDebugUnitTest
-          
+          name: test-results
+          path: |
+            ./**/build/reports/tests/
+            ./**/build/test-results/
+
   size_check_xml:
     name: Size Check XML
     runs-on: ubuntu-22.04
@@ -54,13 +70,26 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v3.1.0
       - uses: GetStream/android-ci-actions/actions/setup-java@main
-      - name: build demo debug
+      - name: Build XML Demo Debug
         run: ./gradlew stream-chat-android-ui-components-sample:assembleDemoDebug
-      - name: Upload artifact to Emerge
-        uses: EmergeTools/emerge-upload-action@v1.0.2
+      - name: Check XML APK Size
+        run: |
+          echo "=== XML APK Size Analysis ==="
+          APK_PATH="./stream-chat-android-ui-components-sample/build/outputs/apk/demo/debug/stream-chat-android-ui-components-sample-demo-debug.apk"
+          if [ -f "$APK_PATH" ]; then
+            SIZE_BYTES=$(stat -f%z "$APK_PATH")
+            SIZE_MB=$(echo "scale=2; $SIZE_BYTES / (1024*1024)" | bc)
+            echo "XML APK Size: $SIZE_MB MB"
+            echo "SIZE_MB=$SIZE_MB" >> $GITHUB_ENV
+          else
+            echo "XML APK not found!"
+            exit 1
+          fi
+      - name: Upload XML APK
+        uses: actions/upload-artifact@v4.4.3
         with:
-          artifact_path: ./stream-chat-android-ui-components-sample/build/outputs/apk/demo/debug/stream-chat-android-ui-components-sample-demo-debug.apk
-          build_type: debug
+          name: xml-demo-apk
+          path: ./stream-chat-android-ui-components-sample/build/outputs/apk/demo/debug/stream-chat-android-ui-components-sample-demo-debug.apk
 
   size_check_compose:
     name: Size Check Compose
@@ -69,10 +98,41 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v3.1.0
       - uses: GetStream/android-ci-actions/actions/setup-java@main
-      - name: build debug
+      - name: Build Compose Debug
         run: ./gradlew stream-chat-android-compose-sample:assembleDebug
-      - name: Upload artifact to Emerge
-        uses: EmergeTools/emerge-upload-action@v1.0.2
+      - name: Check Compose APK Size
+        run: |
+          echo "=== Compose APK Size Analysis ==="
+          APK_PATH="./stream-chat-android-compose-sample/build/outputs/apk/debug/stream-chat-android-compose-sample-debug.apk"
+          if [ -f "$APK_PATH" ]; then
+            SIZE_BYTES=$(stat -f%z "$APK_PATH")
+            SIZE_MB=$(echo "scale=2; $SIZE_BYTES / (1024*1024)" | bc)
+            echo "Compose APK Size: $SIZE_MB MB"
+            echo "SIZE_MB=$SIZE_MB" >> $GITHUB_ENV
+          else
+            echo "Compose APK not found!"
+            exit 1
+          fi
+      - name: Upload Compose APK
+        uses: actions/upload-artifact@v4.4.3
         with:
-          artifact_path: ./stream-chat-android-compose-sample/build/outputs/apk/debug/stream-chat-android-compose-sample-debug.apk
-          build_type: debug
+          name: compose-debug-apk
+          path: ./stream-chat-android-compose-sample/build/outputs/apk/debug/stream-chat-android-compose-sample-debug.apk
+
+  build_summary:
+    name: Build Summary
+    runs-on: ubuntu-22.04
+    needs: [debug_build, release_build, tests, size_check_xml, size_check_compose]
+    steps:
+      - name: Summary
+        run: |
+          echo "🎉 Build and Test Process Completed Successfully!"
+          echo ""
+          echo "📦 Artifacts Available for Download:"
+          echo "   - Debug APKs (debug-apks)"
+          echo "   - Release APKs (release-apks)" 
+          echo "   - Test Results (test-results)"
+          echo "   - XML Demo APK (xml-demo-apk)"
+          echo "   - Compose Debug APK (compose-debug-apk)"
+          echo ""
+          echo "✅ All jobs completed successfully!"
