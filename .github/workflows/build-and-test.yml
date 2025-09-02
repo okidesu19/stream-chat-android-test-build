@@ -16,13 +16,9 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-      - name: Build Debug
+        uses: actions/checkout@v3.1.0
+      - uses: GetStream/android-ci-actions/actions/setup-java@main
+      - name: Build
         run: ./gradlew assembleDebug
 
   release_build:
@@ -30,83 +26,53 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-      - name: Build Release
+        uses: actions/checkout@v3.1.0
+      - uses: GetStream/android-ci-actions/actions/setup-java@main
+      - name: Build
         run: ./gradlew assembleRelease
 
   tests:
     name: Tests
     runs-on: ubuntu-22.04
-    needs: [debug_build]
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
-      - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/checkout@v3.1.0
+      - uses: GetStream/android-ci-actions/actions/setup-java@main
+      - name: Unit tests
+        run: ./scripts/ci-unit-tests.sh
+      - name: Upload testDebugUnitTest results
+        uses: actions/upload-artifact@v4.4.3
+        if: failure()
         with:
-          distribution: 'temurin'
-          java-version: '17'
-      - name: Run Unit Tests
-        run: ./gradlew testDebugUnitTest
-      - name: Upload Test Results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: test-results
-          path: |
-              **/build/reports/tests/
-              **/build/test-results/
-
-  # Optional: Android Lint check
-  lint_check:
-    name: Lint Check
+          name: testDebugUnitTest
+          path: ./**/build/reports/tests/testDebugUnitTest
+          
+  size_check_xml:
+    name: Size Check XML
     runs-on: ubuntu-22.04
-    needs: [debug_build]
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-      - name: Run Lint
-        run: ./gradlew lintDebug
-      - name: Upload Lint Results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: lint-results
-          path: **/build/reports/lint/
-
-  # Optional: APK Size Check (tanpa Emerge)
-  apk_size_check:
-    name: APK Size Check
-    runs-on: ubuntu-22.04
-    needs: [debug_build]
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v4
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-      - name: Build Demo Debug
+        uses: actions/checkout@v3.1.0
+      - uses: GetStream/android-ci-actions/actions/setup-java@main
+      - name: build demo debug
         run: ./gradlew stream-chat-android-ui-components-sample:assembleDemoDebug
-      - name: Check APK Size
-        run: |
-          APK_PATH="./stream-chat-android-ui-components-sample/build/outputs/apk/demo/debug/stream-chat-android-ui-components-sample-demo-debug.apk"
-          if [ -f "$APK_PATH" ]; then
-            SIZE=$(du -h "$APK_PATH" | cut -f1)
-            echo "APK Size: $SIZE"
-            echo "APK_SIZE=$SIZE" >> $GITHUB_ENV
-          else
-            echo "APK file not found!"
-            exit 1
-          fi
+      - name: Upload artifact to Emerge
+        uses: EmergeTools/emerge-upload-action@v1.0.2
+        with:
+          artifact_path: ./stream-chat-android-ui-components-sample/build/outputs/apk/demo/debug/stream-chat-android-ui-components-sample-demo-debug.apk
+          build_type: debug
+
+  size_check_compose:
+    name: Size Check Compose
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3.1.0
+      - uses: GetStream/android-ci-actions/actions/setup-java@main
+      - name: build debug
+        run: ./gradlew stream-chat-android-compose-sample:assembleDebug
+      - name: Upload artifact to Emerge
+        uses: EmergeTools/emerge-upload-action@v1.0.2
+        with:
+          artifact_path: ./stream-chat-android-compose-sample/build/outputs/apk/debug/stream-chat-android-compose-sample-debug.apk
+          build_type: debug
